@@ -15,4 +15,6 @@ public interface FirebaseRealtimeDbRepoService<T, ID> {
 
     public void delete(T obj);
 
+    public T findAll(T obj);
+
 }

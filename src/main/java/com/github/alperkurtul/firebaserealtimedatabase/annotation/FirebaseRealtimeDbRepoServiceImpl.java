@@ -7,7 +7,6 @@ import com.github.alperkurtul.firebaserealtimedatabase.configuration.FirebaseRea
 import com.github.alperkurtul.firebaserealtimedatabase.exception.HttpBadRequestException;
 import com.github.alperkurtul.firebaserealtimedatabase.exception.HttpNotFoundException;
 import com.github.alperkurtul.firebaserealtimedatabase.exception.HttpUnauthorizedException;
-import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpStatus;
@@ -37,8 +36,10 @@ public class FirebaseRealtimeDbRepoServiceImpl<T, ID> implements FirebaseRealtim
     @Autowired
     private FirebaseRealtimeDatabaseConfigurationProperties firebaseRealtimeDatabaseConfigurationProperties;
 
-    private Class<T> firebaseDocumentClazz = (Class)((ParameterizedType)this.getClass().getGenericSuperclass()).getActualTypeArguments()[0];
-    private Class<ID> documentIdClazz = (Class)((ParameterizedType)this.getClass().getGenericSuperclass()).getActualTypeArguments()[1];
+    @SuppressWarnings("unchecked")
+    private Class<T> firebaseDocumentClazz = (Class<T>)((ParameterizedType)this.getClass().getGenericSuperclass()).getActualTypeArguments()[0];
+    @SuppressWarnings("unchecked")
+    private Class<ID> documentIdClazz = (Class<ID>)((ParameterizedType)this.getClass().getGenericSuperclass()).getActualTypeArguments()[1];
     private String documentPath;
     private Field authKeyField;
     private Field documentIdField;
@@ -106,6 +107,40 @@ public class FirebaseRealtimeDbRepoServiceImpl<T, ID> implements FirebaseRealtim
 
     }
 
+    @Override
+    public T findAll(T obj) {
+        /*
+        Firebase Database REST API
+        GET - Reading Data
+        */
+
+        String authKey = getAnnotatedFielValue(obj, this.authKeyField);
+        String firebaseId = getAnnotatedFielValue(obj, this.documentIdField);
+
+        String url = generateUrl("findAll", authKey, firebaseId);
+        ResponseEntity<T> responseEntity = null;
+        try {
+            responseEntity = restTemplate.getForEntity(url, this.firebaseDocumentClazz);
+        } catch (HttpStatusCodeException e) {
+            if (e.getStatusCode() == HttpStatus.BAD_REQUEST) {
+                throw new HttpBadRequestException(e.getResponseBodyAsString());
+            } else if (e.getStatusCode() == HttpStatus.NOT_FOUND) {
+                throw new HttpNotFoundException(e.getResponseBodyAsString());
+            } else if (e.getStatusCode() == HttpStatus.UNAUTHORIZED) {
+                throw new HttpUnauthorizedException(e.getResponseBodyAsString());
+            } else {
+                throw new RuntimeException();
+            }
+        }
+
+        if (responseEntity.getBody() == null) {
+            throw new HttpNotFoundException("FirebaseDocumentId Not Found");
+        }
+
+        return responseEntity.getBody();
+
+    }
+
     @Deprecated  // Use 'saveWithRandomId' instead
     @Override
     public FirebaseSaveResponse save(T obj) {
@@ -132,7 +167,7 @@ public class FirebaseRealtimeDbRepoServiceImpl<T, ID> implements FirebaseRealtim
 
         HttpEntity<String> requestBody = null;
         try {
-            requestBody = new HttpEntity(firebaseObjectMapper.writeValueAsString(obj));
+            requestBody = new HttpEntity<String>(firebaseObjectMapper.writeValueAsString(obj));
         } catch (JsonProcessingException e) {
             throw new RuntimeException(e);
         }
@@ -181,7 +216,7 @@ public class FirebaseRealtimeDbRepoServiceImpl<T, ID> implements FirebaseRealtim
 
         HttpEntity<String> requestBody = null;
         try {
-            requestBody = new HttpEntity(firebaseObjectMapper.writeValueAsString(obj));
+            requestBody = new HttpEntity<String>(firebaseObjectMapper.writeValueAsString(obj));
         } catch (JsonProcessingException e) {
             throw new RuntimeException(e);
         }
@@ -225,7 +260,7 @@ public class FirebaseRealtimeDbRepoServiceImpl<T, ID> implements FirebaseRealtim
 
         HttpEntity<String> requestBody = null;
         try {
-            requestBody = new HttpEntity(firebaseObjectMapper.writeValueAsString(obj));
+            requestBody = new HttpEntity<String>(firebaseObjectMapper.writeValueAsString(obj));
         } catch (JsonProcessingException e) {
             throw new RuntimeException(e);
         }
@@ -323,6 +358,8 @@ public class FirebaseRealtimeDbRepoServiceImpl<T, ID> implements FirebaseRealtim
             url = url + this.documentPath + ".json?auth=" + authKey;
         } else if (callerMethod.equals("saveWithSpecificId")) {
             url = url + this.documentPath + "/" + firebaseId + ".json?auth=" + authKey;
+        } else if (callerMethod.equals("findAll")) {
+            url = url + this.documentPath + ".json?auth=" + authKey;
         }
 
         return url;
